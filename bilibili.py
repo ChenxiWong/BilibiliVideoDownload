@@ -4,8 +4,11 @@ import math
 import time
 import requests
 import json
-from moviepy.editor import concatenate_videoclips,VideoFileClip
+# from moviepy.editor import concatenate_videoclips, VideoFileClip
 from requests.exceptions import ConnectionError, ConnectTimeout
+from ffmpy import FFmpeg
+import shutil
+# import pdb
 
 
 def user_setting():
@@ -41,9 +44,12 @@ class Bilibili():
 
     def process_url(self):
         # 对输入的 URL 进行判断并提取 av 号
-        result_01 = re.match('https://www.bilibili.com/video/av(\d+).*?', self.url)
-        result_02 = re.match('https://www.bilibili.com/bangumi/play/(\w{2})(\d+).*?', self.url)
-        result_03 = re.match('https://space.bilibili.com/(\d+)/video.*?', self.url)
+        result_01 = re.match(
+            'https://www.bilibili.com/video/av(\d+).*?', self.url)
+        result_02 = re.match(
+            'https://www.bilibili.com/bangumi/play/(\w{2})(\d+).*?', self.url)
+        result_03 = re.match(
+            'https://space.bilibili.com/(\d+)/video.*?', self.url)
         if result_01:
             self.avid = result_01.group(1)
             self.headers = {
@@ -81,7 +87,8 @@ class Bilibili():
             print("网络异常，请检查网络连接是否正常")
             return 0
         if res.status_code == 200:
-            pages_num = math.ceil(int(res.json()["data"]["page"]["count"]) / 30)
+            pages_num = math.ceil(
+                int(res.json()["data"]["page"]["count"]) / 30)
             for i in range(1, int(pages_num) + 1):
                 url = "https://api.bilibili.com/x/space/arc/search?mid={}&ps=30&tid=0&pn={}&keyword=&order=pubdate&jsonp=jsonp".format(
                     self.mid, i)
@@ -111,7 +118,8 @@ class Bilibili():
     # avxxxx 类型，提取 CVID
     def get_cvid(self):
         # 经过分析 avid 不能确定唯一视频，因为存在视频分p的情况，B站采用 cvid 来确认每一个视频的 id
-        get_cvid_url = 'https://api.bilibili.com/x/player/pagelist?aid={}&jsonp=jsonp'.format(self.avid)
+        get_cvid_url = 'https://api.bilibili.com/x/player/pagelist?aid={}&jsonp=jsonp'.format(
+            self.avid)
         try:
             res = requests.get(url=get_cvid_url, headers=self.headers)
         except (ConnectionError, ConnectTimeout) as e:
@@ -128,7 +136,8 @@ class Bilibili():
     # 番剧、电视剧、电影 ，提取 CVID
     def get_bangumi_cvid(self):
         # 分析得到 cvid 和 avid 存在于页面 html 中
-        index_url = "https://www.bilibili.com/bangumi/play/{}{}".format(self.video_prefix, self.ssvid)
+        index_url = "https://www.bilibili.com/bangumi/play/{}{}".format(
+            self.video_prefix, self.ssvid)
         try:
             index_page = requests.get(url=index_url, headers=self.headers)
         except (ConnectionError, ConnectTimeout) as e:
@@ -139,15 +148,17 @@ class Bilibili():
             # 正则匹配 cvid 和 avid
             id_info = re.search('"epList":\[(.*?)\]', page_info, re.S)
             # 正则匹配视频名称
-            name_info = re.search('"position".*?"name": "(.*?)",', page_info, re.S)
+            name_info = re.search(
+                '"position".*?"name": "(.*?)",', page_info, re.S)
             try:
                 cvid_list = re.findall('"cid":(\d+)', id_info.group(1))
                 # 如果 cvid 数量为1，则 title 不变
                 if len(cvid_list) == 1:
-                    self.cvid_list = [{"title": name_info.group(1), 'cvid': cvid_list[0]}]
+                    self.cvid_list = [
+                        {"title": name_info.group(1), 'cvid': cvid_list[0]}]
                 # 当 cvid 数量大于1后，title = title + 第n话
                 elif len(cvid_list) > 1:
-                    self.cvid_list = [{"title": name_info.group(1) + " 第{}话".format(index_id + 1), 'cvid': cvid} for
+                    self.cvid_list = [{"title": name_info.group(1) + "_第{}话".format(index_id + 1), 'cvid': cvid} for
                                       index_id, cvid in enumerate(cvid_list)]
                 self.avid = re.findall('"aid":(\d+)', id_info.group(1))[0]
             except AttributeError as e:
@@ -212,10 +223,13 @@ class Bilibili():
                     total += 1
                     f.flush()
 
-                    speed = (1024 * total) / math.ceil(time.time() - start_time + 0.001)
+                    speed = (1024 * total) / \
+                        math.ceil(time.time() - start_time + 0.001)
                     done = int(math.ceil(20 * current_size / video_size))
                     print('\r[%s%s]%s %s%% %s %s' % (
-                        "#" * done, " " * (20 - done), self.storage_unit(speed), int(current_size / video_size * 100),
+                        "#" * done, " " *
+                        (20 - done), self.storage_unit(speed), int(current_size /
+                                                                   video_size * 100),
                         cvid['title'], self.storage_unit(video_size)[:-2]), end="")
             print("\t下载完成!")
 
@@ -272,12 +286,13 @@ class Bilibili():
     # 下载视频
     def download_video(self):
         if len(self.cvid_list) > 1:
-            print("{} 共有{}话/集".format(self.cvid_list[0]["title"].split(" ")[0], len(self.cvid_list)))
+            print(
+                "{} 共有{}话/集".format(self.cvid_list[0]["title"].split(" ")[0], len(self.cvid_list)))
             print("""
                 规则示例:
                 all: 表示全选
-                1-10: 表示下载1-10话/集    
-                1,6,8,4: 表示下载1,6,8,4话/集      
+                1-10: 表示下载1-10话/集
+                1,6,8,4: 表示下载1,6,8,4话/集
                 2: 表示下载第2话/集
             """)
             while 1:
@@ -300,7 +315,8 @@ class Bilibili():
 
             # 请求获得视频下载地址
             try:
-                video_info = requests.get(url=url, headers=self.headers, cookies=self.cookies)
+                video_info = requests.get(
+                    url=url, headers=self.headers, cookies=self.cookies)
             except (ConnectionError, ConnectTimeout) as e:
                 print("网络异常，请检查互联网连接是否正常")
                 return 0
@@ -311,7 +327,7 @@ class Bilibili():
                         video_download_url = video_info_dc['data']['durl'][0]['url']
                         video_size = video_info_dc['data']['durl'][0]['size']
                         video_quality = video_info_dc['data']['quality']
-                    except KeyError as  e:
+                    except KeyError as e:
                         print("获取视频下载链接失败")
                         return 0
                 else:
@@ -322,13 +338,14 @@ class Bilibili():
                             video_quality = video_info_dc['result']['quality']
                         elif len(video_info_dc['result']['durl']) > 1:
                             video_download_url = [
-                                {"down_url": down_dc['url'], "video_size": down_dc['size'], "order": down_dc['order']}
+                                {"down_url": down_dc['url'],
+                                    "video_size": down_dc['size'], "order": down_dc['order']}
                                 for down_dc in video_info_dc['result']['durl']]
                             video_quality = video_info_dc['result']['quality']
                         else:
                             print("获取视频下载链接失败")
                             return 0
-                    except KeyError as  e:
+                    except KeyError as e:
                         print("获取视频下载链接失败")
                         return 0
                 quality_dc = {
@@ -340,37 +357,52 @@ class Bilibili():
                 if isinstance(video_download_url, list):
                     # 分段下载
                     if self.up_name:
-                        merge_dir = '{}{}/{}'.format(self.dirname, self.up_name, cvid['title'])
+                        merge_dir = '{}{}/{}'.format(self.dirname,
+                                                     self.up_name, cvid['title'])
                     else:
                         merge_dir = '{}{}'.format(self.dirname, cvid['title'])
                     for down_url_dc in video_download_url:
                         if not os.path.exists(merge_dir):
                             os.mkdir(merge_dir)
-                        filename = merge_dir + "/{}.mp4".format(down_url_dc['order'])
+                        filename = merge_dir + \
+                            "/{}.mp4".format(down_url_dc['order'])
 
-                        current_size = self.breakpoint_resume(filename, int(down_url_dc['video_size']))
+                        current_size = self.breakpoint_resume(
+                            filename, int(down_url_dc['video_size']))
                         if current_size == -1:
-                            print("已取消 {} 的下载".format(os.path.basename(filename)))
+                            print("已取消 {} 的下载".format(
+                                os.path.basename(filename)))
                             continue
                         elif current_size != 0:
                             # 在 headers 中设置断点位置，当断点为0时，不用设置 Range
-                            self.headers["Range"] = 'bytes=%d-%d' % (current_size, down_url_dc['video_size'])
+                            self.headers["Range"] = 'bytes=%d-%d' % (
+                                current_size, down_url_dc['video_size'])
                         try:
-                            video_dw = requests.get(url=down_url_dc['down_url'], stream=True, headers=self.headers)
+                            video_dw = requests.get(
+                                url=down_url_dc['down_url'], stream=True, headers=self.headers)
                         except (ConnectionError, ConnectTimeout) as e:
                             print("网络异常，请检查互联网连接是否正常")
                             return 0
                         print("{}正在下载...".format(filename))
-                        self.write_disk(filename, video_dw, 0, down_url_dc['video_size'], cvid)
+                        self.write_disk(filename, video_dw, 0,
+                                        down_url_dc['video_size'], cvid)
                     # 分段视频下载完毕，开始合并视频
                     print("{} 所有片段下载完毕,等待合并中..".format(cvid['title']))
+                    # pdb.set_trace()
                     video_list = os.listdir(merge_dir)
-                    clips = [VideoFileClip('{}/{}'.format(merge_dir,video_name)) for video_name in video_list]
-                    finalclip = concatenate_videoclips(clips)
-                    print('{} 视频合并中...'.format(cvid['title']))
-                    finalclip.write_videofile("./{}-{}.mp4".format(cvid['title'],quality_dc[int(video_quality)]))
-                    print('{} 视频合并完毕!'.format(cvid['title']))
-                    os.remove(merge_dir)
+                    with open("{}/input.txt".format(merge_dir), mode='w', encoding='utf-8') as f:
+                        video_list.sort(key=lambda x: int(x.split('.')[0]))
+                        [f.write('file {}\n'.format(item))
+                         for item in video_list]
+                    ff = FFmpeg(
+                        inputs={
+                            '{}/input.txt'.format(merge_dir): ' -f concat -safe 0 '},
+                        outputs={
+                            '{}- {}.mp4'.format(cvid['title'], quality_dc[int(video_quality)]): '-c copy '}
+                    )
+                    # print(ff.cmd)
+                    ff.run()
+                    shutil.rmtree(merge_dir)
                 else:
                     if self.up_name:
                         filename = self.dirname + self.up_name + "/" + cvid['title'] + '-' + quality_dc[
@@ -378,21 +410,27 @@ class Bilibili():
                         if not os.path.exists(self.dirname + self.up_name):
                             os.mkdir(self.dirname + self.up_name)
                     else:
-                        filename = self.dirname + cvid['title'] + '-' + quality_dc[int(video_quality)] + '.mp4'
-                    current_size = self.breakpoint_resume(filename, int(video_size))
+                        filename = self.dirname + \
+                            cvid['title'] + '-' + \
+                            quality_dc[int(video_quality)] + '.mp4'
+                    current_size = self.breakpoint_resume(
+                        filename, int(video_size))
                     if current_size == -1:
                         print("已取消 {} 的下载".format(os.path.basename(filename)))
                         continue
                     elif current_size != 0:
                         # 在 headers 中设置断点位置，当断点为0时，不用设置 Range
-                        self.headers["Range"] = 'bytes=%d-%d' % (current_size, video_size)
+                        self.headers["Range"] = 'bytes=%d-%d' % (
+                            current_size, video_size)
                     try:
-                        video_dw = requests.get(url=video_download_url, stream=True, headers=self.headers, timeout=15)
+                        video_dw = requests.get(
+                            url=video_download_url, stream=True, headers=self.headers, timeout=15)
                     except (ConnectionError, ConnectTimeout) as e:
                         print("网络异常，请检查互联网连接是否正常")
                         return 0
                     print("{}正在下载...".format(filename))
-                    self.write_disk(filename, video_dw, current_size, video_size, cvid)
+                    self.write_disk(filename, video_dw,
+                                    current_size, video_size, cvid)
 
     def start(self):
         # 只要出现网络异常就退出程序
@@ -416,11 +454,11 @@ if __name__ == "__main__":
     5.支持输入 up 主主页 url，对该up所有视频进行下载
     """
     print("""
-    哔哩哔哩视频下载工具-V1.0          
+    哔哩哔哩视频下载工具-V1.0
     Author：fthemuse
     Time:2020-2-25
     Email:fthemuse@foxmail.com
-    
+
     功能：
     1.支持B站up视频、番剧、电影下载;
     2.支持对指定 UP 主，所有的视频进行下载;
@@ -428,11 +466,11 @@ if __name__ == "__main__":
     4.未登录状态，默认下载 480P ，登录后默认下载 1080P(可以通过修改 setting.txt 中的配置，实现登录);
     5.视频下载路径默认为当前目录，可以通过修改 setting.txt 中的配置，自定义下载目录;
     6.对于多 P 视频，用户可自定义下载集数。
-    
+
     使用：
     1.复制视频页面地址到此程序，回车确认，进行下载;
     2.复制UP主个人视频主页地址到此程序，回车确认，下载 UP 所有视频。
-    
+
     注意：
     1.推荐用户登录后使用，在未登录状态下,下载某些番剧、电影时,会出现视频分段的现象(exe版本暂不支持自动合并，代码版支持但比较耗时);
     2.如果出现视频分段，可使用视频编辑软件自行合并;
