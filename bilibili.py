@@ -357,15 +357,15 @@ class Bilibili():
                 if isinstance(video_download_url, list):
                     # 分段下载
                     if self.up_name:
-                        merge_dir = '{}{}/{}'.format(self.dirname,
+                        merge_dir = '{}{}/{}/'.format(self.dirname,
                                                      self.up_name, cvid['title'])
                     else:
-                        merge_dir = '{}{}'.format(self.dirname, cvid['title'])
+                        merge_dir = '{}{}/'.format(self.dirname, cvid['title'])
                     for down_url_dc in video_download_url:
                         if not os.path.exists(merge_dir):
                             os.mkdir(merge_dir)
                         filename = merge_dir + \
-                            "/{}.mp4".format(down_url_dc['order'])
+                            "{}.mp4".format(down_url_dc['order'])
 
                         current_size = self.breakpoint_resume(
                             filename, int(down_url_dc['video_size']))
@@ -390,15 +390,15 @@ class Bilibili():
                     print("{} 所有片段下载完毕,等待合并中..".format(cvid['title']))
                     # pdb.set_trace()
                     video_list = os.listdir(merge_dir)
-                    with open("{}/input.txt".format(merge_dir), mode='w', encoding='utf-8') as f:
+                    with open("{}input.txt".format(merge_dir), mode='w', encoding='utf-8') as f:
                         video_list.sort(key=lambda x: int(x.split('.')[0]))
                         [f.write('file {}\n'.format(item))
                          for item in video_list]
                     ff = FFmpeg(
                         inputs={
-                            '{}/input.txt'.format(merge_dir): ' -f concat -safe 0 '},
+                            '{}input.txt'.format(merge_dir): ' -f concat -safe 0 '},
                         outputs={
-                            '{}- {}.mp4'.format(cvid['title'], quality_dc[int(video_quality)]): '-c copy '}
+                            '{}{}-{}.mp4'.format( self.dirname, cvid['title'], quality_dc[int(video_quality)]): '-c copy '}
                     )
                     # print(ff.cmd)
                     ff.run()
