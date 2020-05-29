@@ -1,3 +1,9 @@
+#! /usr/bin/python3
+# -*- coding:utf-8 -*- 
+# version: 0.1.00
+# Create Time:2020-05-28 13:14:40
+# Last Update: 2020-05-29 14:14:59
+
 import re
 import os
 import math
@@ -41,6 +47,7 @@ class Bilibili():
         self.avid = None
         self.headers = None
         self.up_name = None
+        self.flag_BV = False
 
     def process_url(self):
         # 对输入的 URL 进行判断并提取 av 号
@@ -50,6 +57,7 @@ class Bilibili():
             'https://www.bilibili.com/bangumi/play/(\w{2})(\d+).*?', self.url)
         result_03 = re.match(
             'https://space.bilibili.com/(\d+)/video.*?', self.url)
+        result_04 = re.match('https://www.bilibili.com/video/BV(\w+).*?', self.url)
         if result_01:
             self.avid = result_01.group(1)
             self.headers = {
@@ -73,6 +81,16 @@ class Bilibili():
         elif result_03:
             self.mid = result_03.group(1)
             self.flag_up = True
+        elif result_04:
+            self.bvid = result_04.group(1)
+            self.headers = {
+                'Accept': '*/*',
+                'Origin': 'https://www.bilibili.com',
+                'Referer': 'https://www.bilibili.com/video/BV{}'.format(self.bvid),
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko)'
+                              ' Chrome/74.0.3729.131 Safari/537.36'
+            }
+            self.flag_BV = True
         else:
             print("请检查输入的 URL 是否正确")
             return 0
@@ -132,6 +150,22 @@ class Bilibili():
                               cvidinfo in cvidinfo_list]
         else:
             raise ValueError('获取cvid失败，请重试')
+
+    def get_bv_cvid(self):
+        bvid_url = 'https://api.bilibili.com/x/player/pagelist?bvid={}&jsonp=jsonp'.format(self.bvid)
+        try:
+            res = requests.get(url=bvid_url, headers=self.headers)
+        except (ConnectionError, ConnectTimeout) as e:
+            print('网络异常，请检查互联网连接是否正常')
+            return 0
+        if res.status_code == 200:
+            res_json = res.json()
+            cvidinfo_list = res_json['data']
+            self.cvid_list = [{'title': cvidinfo['part'], 'cvid': cvidinfo['cid'], 'page': cvidinfo['page']} for
+                              cvidinfo in cvidinfo_list]
+        else:
+            raise ValueError('获取cvid失败，请重试')
+
 
     # 番剧、电视剧、电影 ，提取 CVID
     def get_bangumi_cvid(self):
@@ -311,6 +345,10 @@ class Bilibili():
                 movie_url = 'https://api.bilibili.com/pgc/player/web/playurl?avid={avid}&cid={cvid}&bvid=&qn={qn}&type=&otype=json'.format(
                     avid=self.avid, cvid=cvid['cvid'], qn=80)
                 url = movie_url
+            elif self.flag_BV:
+                av_url = 'https://api.bilibili.com/x/player/playurl?avid=&cid={cvid}&bvid={bvid}&qn={qn}&type=&otype=json'.format(
+                    cvid=cvid['cvid'], bvid=self.bvid, qn=80)
+                url = av_url
             # print(url)
 
             # 请求获得视频下载地址
@@ -320,6 +358,7 @@ class Bilibili():
             except (ConnectionError, ConnectTimeout) as e:
                 print("网络异常，请检查互联网连接是否正常")
                 return 0
+            # pdb.set_trace()
             if video_info.status_code == 200:
                 video_info_dc = video_info.json()
                 if self.flag_av or self.flag_up:
@@ -327,6 +366,24 @@ class Bilibili():
                         video_download_url = video_info_dc['data']['durl'][0]['url']
                         video_size = video_info_dc['data']['durl'][0]['size']
                         video_quality = video_info_dc['data']['quality']
+                    except KeyError as e:
+                        print("获取视频下载链接失败")
+                        return 0
+                elif self.flag_BV:
+                    try:
+                        if len(video_info_dc['data']['durl']) == 1:
+                            video_download_url = video_info_dc['data']['durl'][0]['url']
+                            video_size = video_info_dc['data']['durl'][0]['size']
+                            video_quality = video_info_dc['data']['quality']
+                        elif len(video_info_dc['data']['durl']) > 1:
+                            video_download_url = [
+                                    {"down_url": down_dc['url'],
+                                        "video_size": down_dc['size'], "order": down_dc['order']}
+                                    for down_dc in video_info_dc['data']['durl']]
+                            video_quality = video_info_dc['data']['quality']
+                        else:
+                            print("获取视频下载链接失败")
+                            return 0
                     except KeyError as e:
                         print("获取视频下载链接失败")
                         return 0
@@ -338,9 +395,9 @@ class Bilibili():
                             video_quality = video_info_dc['result']['quality']
                         elif len(video_info_dc['result']['durl']) > 1:
                             video_download_url = [
-                                {"down_url": down_dc['url'],
-                                    "video_size": down_dc['size'], "order": down_dc['order']}
-                                for down_dc in video_info_dc['result']['durl']]
+                                    {"down_url": down_dc['url'],
+                                        "video_size": down_dc['size'], "order": down_dc['order']}
+                                    for down_dc in video_info_dc['result']['durl']]
                             video_quality = video_info_dc['result']['quality']
                         else:
                             print("获取视频下载链接失败")
@@ -388,7 +445,6 @@ class Bilibili():
                                         down_url_dc['video_size'], cvid)
                     # 分段视频下载完毕，开始合并视频
                     print("{} 所有片段下载完毕,等待合并中..".format(cvid['title']))
-                    # pdb.set_trace()
                     video_list = os.listdir(merge_dir)
                     with open("{}input.txt".format(merge_dir), mode='w', encoding='utf-8') as f:
                         video_list.sort(key=lambda x: int(x.split('.')[0]))
@@ -439,9 +495,13 @@ class Bilibili():
                 self.get_up_all_avid()
                 self.get_up_all_cvid()
             else:
-                flage = self.get_cvid() if self.flag_av else self.get_bangumi_cvid()
-                if flage != 0:
-                    self.download_video()
+                if self.flag_av:
+                    self.get_cvid()
+                elif self.flag_BV:
+                    self.get_bv_cvid()
+                else:
+                    self.get_bangumi_cvid()
+                self.download_video()
 
 
 if __name__ == "__main__":
@@ -477,6 +537,7 @@ if __name__ == "__main__":
     3.该版本目前为单线程下载;
     """)
 
+    # pdb.set_trace()
     settings = user_setting()
     cookies = settings[0]
     dirname = settings[1]
