@@ -2,7 +2,7 @@
 # -*- coding:utf-8 -*- 
 # version: 0.1.00
 # Create Time:2020-05-28 13:14:40
-# Last Update: 2020-05-29 14:14:59
+# Last Update: 2020-08-02 11:37:28 PM
 
 import re
 import os
@@ -543,6 +543,7 @@ if __name__ == "__main__":
     dirname = settings[1]
     while 1:
         video_url = input("请输入地址:")
+        bili = None
         # 判断地址是否存在，如果存在，则传入Bilibili中，如果不能存在，使用默认值，并提示用户路径配置错误
         if os.path.exists(dirname["dirname"]):
             # 判断路径是否以 "/" 结尾，如果没有，则补全
